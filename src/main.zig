@@ -44,35 +44,11 @@ pub fn main() !void {
     var last_frame_time = Clock.now(io);
     var delta: i64 = 1;
 
-    const espejo = Material{
-        .Color = V3FromColor(htmlColor("#fff")),
+    const rojo = Material{
+        .Color = V3FromColor(htmlColor("#f00")),
         .Propiedades = .{
-            .Albedo = 0,
-            .Especular = 1,
-            .Reflectividad = 0.9,
-            .Transparencia = 0,
-        },
-        .Especular = 100,
-        .Refractive_index = 0,
-    };
-
-    const vidrio = Material{
-        .Color = V3FromColor(htmlColor("#aaa")),
-        .Propiedades = .{
-            .Albedo = 0,
-            .Especular = 0.5,
-            .Reflectividad = 0.1,
-            .Transparencia = 0.8,
-        },
-        .Especular = 125,
-        .Refractive_index = 1.5,
-    };
-
-    const marmol = Material{
-        .Color = V3FromColor(htmlColor("#66664c")),
-        .Propiedades = .{
-            .Albedo = 0.4,
-            .Especular = 0.3,
+            .Albedo = 0.8,
+            .Especular = 0.2,
             .Reflectividad = 0,
             .Transparencia = 0,
         },
@@ -82,19 +58,14 @@ pub fn main() !void {
 
     const spheres = [_]Forma{
         .{ .Sphere = .{
-            .center = .{ .x = 10, .y = 0, .z = -40 },
-            .radius = 5,
-            .material = espejo,
+            .center = .{ .x = 5, .y = 0, .z = 10 },
+            .radius = 3,
+            .material = rojo,
         } },
         .{ .Sphere = .{
-            .center = .{ .x = 0, .y = 0, .z = 0 },
-            .radius = 5,
-            .material = marmol,
-        } },
-        .{ .Sphere = .{
-            .center = .{ .x = -25, .y = 0, .z = -40 },
-            .radius = 5,
-            .material = vidrio,
+            .center = .{ .x = -5, .y = 0, .z = 15 },
+            .radius = 3,
+            .material = rojo,
         } },
     };
 
@@ -102,23 +73,15 @@ pub fn main() !void {
         .{
             .Color = V3FromColor(htmlColor("#fff")),
             .Intensity = 1,
-            .Position = .{ .x = 0, .y = 50, .z = 20 },
+            .Position = .{ .x = 10, .y = 20, .z = 0 },
         },
     };
 
-    const cameraDistance = 100;
     var camera: Camera = .init(.{
         .x = 0,
         .y = 0,
-        .z = cameraDistance,
-    }, .zero());
-
-    const cameraTurnSpeed: f32 = std.math.pi / 2.0;
-    var camera_x_angle: f32 = std.math.pi;
-    var camera_y_angle: f32 = 0;
-
-    const camera_y_angle_max = std.math.pi / 4.0;
-    const camera_y_angle_min = -camera_y_angle_max;
+        .z = -10,
+    }, .{ .x = 0, .y = 0, .z = 10 });
 
     while (!rl.windowShouldClose()) {
         defer {
@@ -128,31 +91,7 @@ pub fn main() !void {
         }
         framebuffer.clear();
 
-        const dt: f32 = @as(f32, @floatFromInt(delta)) / 1_000_000;
-
-        if (rl.isKeyDown(.a)) {
-            camera_x_angle += cameraTurnSpeed * dt;
-        }
-        if (rl.isKeyDown(.d)) {
-            camera_x_angle -= cameraTurnSpeed * dt;
-        }
-        if (rl.isKeyDown(.w)) {
-            camera_y_angle += cameraTurnSpeed * dt;
-            camera_y_angle = @max(camera_y_angle_min, @min(camera_y_angle_max, camera_y_angle));
-        }
-        if (rl.isKeyDown(.s)) {
-            camera_y_angle -= cameraTurnSpeed * dt;
-            camera_y_angle = @max(camera_y_angle_min, @min(camera_y_angle_max, camera_y_angle));
-        }
-
-        camera.Postition.x = @cos(camera_x_angle) * cameraDistance;
-        camera.Postition.y = @sin(camera_y_angle) * cameraDistance;
-        camera.Postition.z = @sin(camera_x_angle) * cameraDistance;
-
-        camera.lookAt(.zero());
-
         try render(&framebuffer, &spheres, &lights, camera);
-
         try framebuffer.swap_buffers();
     }
 }
@@ -162,7 +101,7 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
     const height_f32: f32 = @floatFromInt(target.height);
 
     const aspect_ratio = width_f32 / height_f32;
-    const FOV = std.math.pi / 3.0;
+    const FOV = 45.0 * (std.math.pi / 180.0);
     const perspective_scale = @tan(FOV * 0.5);
 
     for (0..height) |screen_y| {
@@ -176,19 +115,13 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
             const x_direction = x_minus1_to_1 * aspect_ratio * perspective_scale;
             const y_direction = y_minus1_to_1 * perspective_scale;
 
-            const direction_from_camera = (rl.Vector3{
+            const direction = (rl.Vector3{
                 .x = x_direction,
                 .y = y_direction,
                 .z = 1,
             }).normalize();
 
-            const direction = rl.Vector3{
-                .x = direction_from_camera.x * camera.Right.x + direction_from_camera.y * camera.Up.x + direction_from_camera.z * camera.Forward.x,
-                .y = direction_from_camera.x * camera.Right.y + direction_from_camera.y * camera.Up.y + direction_from_camera.z * camera.Forward.y,
-                .z = direction_from_camera.x * camera.Right.z + direction_from_camera.y * camera.Up.z + direction_from_camera.z * camera.Forward.z,
-            };
-
-            const col = cast_ray(camera.Postition, direction, objects, lights, 5);
+            const col = cast_ray(camera.Postition, direction, objects, lights, 2);
             target.set_current_color(V3ToColor(col));
             try target.set_pixel(@intCast(screen_x), @intCast(screen_y));
         }
@@ -219,7 +152,18 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
             if (obscured(hit.Punto, light, objects))
                 continue;
 
-            const diffuse = mat.Color.scale(light.Intensity);
+            const to_light = light.Position.subtract(hit.Punto);
+            const light_dir = to_light.normalize();
+
+            // Luz difusa
+            const n_dot_l = @max(0.0, hit.Normal.dotProduct(light_dir));
+            const diffuse_intensity = n_dot_l * light.Intensity;
+            const diffuse = rl.Vector3{
+                .x = mat.Color.x * light.Color.x * diffuse_intensity,
+                .y = mat.Color.y * light.Color.y * diffuse_intensity,
+                .z = mat.Color.z * light.Color.z * diffuse_intensity,
+            };
+
             color = color.add(diffuse.scale(mat.Propiedades.Albedo));
         }
 
@@ -228,8 +172,20 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
 }
 
 fn obscured(origin: rl.Vector3, light: Light, objects: []const Forma) bool {
-    _ = origin;
-    _ = light;
-    _ = objects;
+    const to_light = light.Position.subtract(origin);
+    const light_dist = @sqrt(to_light.dotProduct(to_light));
+    const light_dir = to_light.normalize();
+
+    // Sombra
+    const shadow_ray_origin = origin.add(light_dir.scale(0.001));
+
+    for (objects) |obj| {
+        if (obj.intersect(shadow_ray_origin, light_dir)) |hit| {
+            if (hit.Distancia > 0.001 and hit.Distancia < light_dist) {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
