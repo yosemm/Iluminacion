@@ -36,7 +36,7 @@ pub fn main() !void {
     const io = threaded.io();
     var framebuffer = Framebuffer.init(width, height, .black, .white);
 
-    rl.initWindow(width, height, "Raytracer!!!");
+    rl.initWindow(width, height, "Trazador de Rayos CPU");
     rl.setTraceLogLevel(.warning);
     defer rl.closeWindow();
     rl.setTargetFPS(60);
@@ -44,56 +44,81 @@ pub fn main() !void {
     var last_frame_time = Clock.now(io);
     var delta: i64 = 1;
 
-    const canica = Material{
-        .Color = .{ .x = 0.8, .y = 0.9, .z = 1.0 },
+    // Canica
+    const canica_vidrio = Material{
+        .Color = .{ .x = 0.85, .y = 0.94, .z = 1.0 },
         .Propiedades = .{
-            .Albedo = 0.1,
-            .Especular = 1.0,
-            .Reflectividad = 0.8,
+            .Albedo = 0.05,
+            .Especular = 1.2,
+            .Reflectividad = 0.85,
             .Transparencia = 0,
         },
-        .Especular = 100,
+        .Especular = 150,
         .Refractive_index = 0,
     };
 
-    const rojo = Material{
-        .Color = V3FromColor(htmlColor("#f00")),
+    // Esfera roja
+    const esfera_roja = Material{
+        .Color = V3FromColor(htmlColor("#f53838")),
         .Propiedades = .{
-            .Albedo = 0.8,
-            .Especular = 1.0,
+            .Albedo = 0.90,
+            .Especular = 1.4,
             .Reflectividad = 0,
             .Transparencia = 0,
         },
-        .Especular = 20,
+        .Especular = 14,
         .Refractive_index = 0,
     };
 
     const spheres = [_]Forma{
+        // Canica izquierda
         .{ .Sphere = .{
-            .center = .{ .x = -2, .y = 0, .z = 5 },
-            .radius = 1,
-            .material = canica,
+            .center = .{ .x = -1.42, .y = 0.0, .z = 4.0 },
+            .radius = 0.56,
+            .material = canica_vidrio,
         } },
+        // Canica centro
         .{ .Sphere = .{
-            .center = .{ .x = 2, .y = 0, .z = 5 },
-            .radius = 1.2,
-            .material = rojo,
+            .center = .{ .x = -0.06, .y = 0.0, .z = 4.0 },
+            .radius = 0.56,
+            .material = canica_vidrio,
+        } },
+        // Esfera roja
+        .{ .Sphere = .{
+            .center = .{ .x = 0.96, .y = 0.0, .z = 2.7 },
+            .radius = 0.82,
+            .material = esfera_roja,
         } },
     };
 
     const lights = [_]Light{
+        // Luz principal
         .{
-            .Color = V3FromColor(htmlColor("#fff")),
-            .Intensity = 1,
-            .Position = .{ .x = 5, .y = 5, .z = 0 },
+            .Color = V3FromColor(htmlColor("#ffffff")),
+            .Intensity = 1.2,
+            .Position = .{ .x = 2.2, .y = 0.4, .z = 0.8 },
+        },
+        // Luz rosada
+        .{
+            .Color = .{ .x = 1.0, .y = 0.35, .z = 0.60 },
+            .Intensity = 0.70,
+            .Position = .{ .x = -0.4, .y = 3.5, .z = 1.8 },
         },
     };
 
+    const cameraDistance: f32 = 3.5;
     var camera: Camera = .init(.{
         .x = 0,
         .y = 0,
         .z = 0,
-    }, .{ .x = 0, .y = 0, .z = 5 });
+    }, .{ .x = 0, .y = 0, .z = cameraDistance });
+
+    const cameraTurnSpeed: f32 = std.math.pi / 2.0;
+    var camera_x_angle: f32 = 0;
+    var camera_y_angle: f32 = 0;
+
+    const camera_y_angle_max = std.math.pi / 4.0;
+    const camera_y_angle_min = -camera_y_angle_max;
 
     while (!rl.windowShouldClose()) {
         defer {
@@ -103,7 +128,32 @@ pub fn main() !void {
         }
         framebuffer.clear();
 
+        const dt: f32 = @as(f32, @floatFromInt(delta)) / 1_000_000;
+
+        if (rl.isKeyDown(.a)) {
+            camera_x_angle += cameraTurnSpeed * dt;
+        }
+        if (rl.isKeyDown(.d)) {
+            camera_x_angle -= cameraTurnSpeed * dt;
+        }
+        if (rl.isKeyDown(.w)) {
+            camera_y_angle += cameraTurnSpeed * dt;
+            camera_y_angle = @max(camera_y_angle_min, @min(camera_y_angle_max, camera_y_angle));
+        }
+        if (rl.isKeyDown(.s)) {
+            camera_y_angle -= cameraTurnSpeed * dt;
+            camera_y_angle = @max(camera_y_angle_min, @min(camera_y_angle_max, camera_y_angle));
+        }
+
+        const target = rl.Vector3{ .x = 0, .y = 0, .z = 3.5 };
+        camera.Postition.x = @sin(camera_x_angle) * cameraDistance;
+        camera.Postition.y = @sin(camera_y_angle) * cameraDistance;
+        camera.Postition.z = target.z - @cos(camera_x_angle) * cameraDistance;
+
+        camera.lookAt(target);
+
         try render(&framebuffer, &spheres, &lights, camera);
+
         try framebuffer.swap_buffers();
     }
 }
@@ -127,11 +177,17 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
             const x_direction = x_minus1_to_1 * aspect_ratio * perspective_scale;
             const y_direction = y_minus1_to_1 * perspective_scale;
 
-            const direction = (rl.Vector3{
+            const direction_from_camera = (rl.Vector3{
                 .x = x_direction,
                 .y = y_direction,
                 .z = 1,
             }).normalize();
+
+            const direction = rl.Vector3{
+                .x = direction_from_camera.x * camera.Right.x + direction_from_camera.y * camera.Up.x + direction_from_camera.z * camera.Forward.x,
+                .y = direction_from_camera.x * camera.Right.y + direction_from_camera.y * camera.Up.y + direction_from_camera.z * camera.Forward.y,
+                .z = direction_from_camera.x * camera.Right.z + direction_from_camera.y * camera.Up.z + direction_from_camera.z * camera.Forward.z,
+            };
 
             const col = cast_ray(camera.Postition, direction, objects, lights, 3);
             target.set_current_color(V3ToColor(col));
@@ -201,7 +257,7 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
         }
 
         return color;
-    } else return .zero();
+    } else return rl.Vector3{ .x = 0.5, .y = 0.7, .z = 1.0 };
 }
 
 fn obscured(origin: rl.Vector3, light: Light, objects: []const Forma) bool {
