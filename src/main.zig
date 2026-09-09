@@ -44,27 +44,39 @@ pub fn main() !void {
     var last_frame_time = Clock.now(io);
     var delta: i64 = 1;
 
+    const canica = Material{
+        .Color = .{ .x = 0.8, .y = 0.9, .z = 1.0 },
+        .Propiedades = .{
+            .Albedo = 0.1,
+            .Especular = 1.0,
+            .Reflectividad = 0.8,
+            .Transparencia = 0,
+        },
+        .Especular = 100,
+        .Refractive_index = 0,
+    };
+
     const rojo = Material{
         .Color = V3FromColor(htmlColor("#f00")),
         .Propiedades = .{
             .Albedo = 0.8,
-            .Especular = 0.2,
+            .Especular = 1.0,
             .Reflectividad = 0,
             .Transparencia = 0,
         },
-        .Especular = 10,
+        .Especular = 20,
         .Refractive_index = 0,
     };
 
     const spheres = [_]Forma{
         .{ .Sphere = .{
-            .center = .{ .x = 5, .y = 0, .z = 10 },
-            .radius = 3,
-            .material = rojo,
+            .center = .{ .x = -2, .y = 0, .z = 5 },
+            .radius = 1,
+            .material = canica,
         } },
         .{ .Sphere = .{
-            .center = .{ .x = -5, .y = 0, .z = 15 },
-            .radius = 3,
+            .center = .{ .x = 2, .y = 0, .z = 5 },
+            .radius = 1.2,
             .material = rojo,
         } },
     };
@@ -73,15 +85,15 @@ pub fn main() !void {
         .{
             .Color = V3FromColor(htmlColor("#fff")),
             .Intensity = 1,
-            .Position = .{ .x = 10, .y = 20, .z = 0 },
+            .Position = .{ .x = 5, .y = 5, .z = 0 },
         },
     };
 
     var camera: Camera = .init(.{
         .x = 0,
         .y = 0,
-        .z = -10,
-    }, .{ .x = 0, .y = 0, .z = 10 });
+        .z = 0,
+    }, .{ .x = 0, .y = 0, .z = 5 });
 
     while (!rl.windowShouldClose()) {
         defer {
@@ -121,7 +133,7 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
                 .z = 1,
             }).normalize();
 
-            const col = cast_ray(camera.Postition, direction, objects, lights, 2);
+            const col = cast_ray(camera.Postition, direction, objects, lights, 3);
             target.set_current_color(V3ToColor(col));
             try target.set_pixel(@intCast(screen_x), @intCast(screen_y));
         }
@@ -129,7 +141,6 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
 }
 
 fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, lights: []const Light, max_recursion: usize) rl.Vector3 {
-    _ = max_recursion;
     var closest_hit: ?Intersect = null;
     var z_buffer: f32 = std.math.floatMax(f32);
     for (objects) |object| {
@@ -148,6 +159,20 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
         const mat = hit.Material;
         var color: rl.Vector3 = .zero();
 
+        // Reflejo
+        if (mat.Propiedades.Reflectividad > 0) {
+            const d_dot_n = direction.dotProduct(hit.Normal);
+            const reflect_direction = direction.subtract(hit.Normal.scale(2.0 * d_dot_n)).normalize();
+
+            if (max_recursion > 0) {
+                const new_og = hit.Punto.add(reflect_direction.scale(0.001));
+                const reflect_color = cast_ray(new_og, reflect_direction, objects, lights, max_recursion - 1);
+                color = color.add(reflect_color.scale(mat.Propiedades.Reflectividad));
+            }
+        }
+
+        const view_direction = direction.scale(-1).normalize();
+
         for (lights) |light| {
             if (obscured(hit.Punto, light, objects))
                 continue;
@@ -164,7 +189,15 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
                 .z = mat.Color.z * light.Color.z * diffuse_intensity,
             };
 
+            // Brillo especular
+            const half_vec = light_dir.add(view_direction).normalize();
+            const n_dot_h = @max(0.0, hit.Normal.dotProduct(half_vec));
+            const spec_factor = std.math.pow(f32, n_dot_h, mat.Especular);
+            const specular_intensity = spec_factor * light.Intensity;
+            const specular = light.Color.scale(specular_intensity);
+
             color = color.add(diffuse.scale(mat.Propiedades.Albedo));
+            color = color.add(specular.scale(mat.Propiedades.Especular));
         }
 
         return color;
