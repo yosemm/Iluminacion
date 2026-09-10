@@ -46,14 +46,14 @@ pub fn main() !void {
 
     // Canica
     const canica_vidrio = Material{
-        .Color = .{ .x = 0.85, .y = 0.94, .z = 1.0 },
+        .Color = .{ .x = 0.92, .y = 0.96, .z = 1.0 },
         .Propiedades = .{
             .Albedo = 0.05,
             .Especular = 1.2,
-            .Reflectividad = 0.85,
+            .Reflectividad = 0.95,
             .Transparencia = 0,
         },
-        .Especular = 150,
+        .Especular = 180,
         .Refractive_index = 0,
     };
 
