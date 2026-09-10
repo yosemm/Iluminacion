@@ -196,6 +196,47 @@ fn render(target: *Framebuffer, objects: []const Forma, lights: []const Light, c
     }
 }
 
+fn getSkyColor(direction: rl.Vector3) rl.Vector3 {
+    const unit_dir = direction.normalize();
+    const t = 0.5 * (unit_dir.y + 1.0);
+    // Colores del cielo
+    const bottom_color = rl.Vector3{ .x = 1.0, .y = 0.96, .z = 0.80 };
+    const mid_color = rl.Vector3{ .x = 1.0, .y = 0.80, .z = 0.62 };
+    const top_color = rl.Vector3{ .x = 0.98, .y = 0.64, .z = 0.44 };
+
+    if (t < 0.5) {
+        const factor = t * 2.0;
+        return bottom_color.scale(1.0 - factor).add(mid_color.scale(factor));
+    } else {
+        const factor = (t - 0.5) * 2.0;
+        return mid_color.scale(1.0 - factor).add(top_color.scale(factor));
+    }
+}
+
+fn refract(incident: rl.Vector3, normal: rl.Vector3, refractive_index: f32) ?rl.Vector3 {
+    var cosi = incident.dotProduct(normal);
+
+    var etai: f32 = 1;
+    var etat = refractive_index;
+    var n = normal;
+
+    if (cosi > 0) {
+        std.mem.swap(f32, &etai, &etat);
+        n = n.scale(-1);
+    } else {
+        cosi = -cosi;
+    }
+
+    const eta = etai / etat;
+    const k = 1 - eta * eta * (1 - cosi * cosi);
+
+    if (k < 0) {
+        return null;
+    } else {
+        return (incident.scale(eta).add(n.scale(eta * cosi - @sqrt(k)))).normalize();
+    }
+}
+
 fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, lights: []const Light, max_recursion: usize) rl.Vector3 {
     var closest_hit: ?Intersect = null;
     var z_buffer: f32 = std.math.floatMax(f32);
@@ -224,6 +265,8 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
                 const new_og = hit.Punto.add(reflect_direction.scale(0.001));
                 const reflect_color = cast_ray(new_og, reflect_direction, objects, lights, max_recursion - 1);
                 color = color.add(reflect_color.scale(mat.Propiedades.Reflectividad));
+            } else {
+                color = color.add(getSkyColor(reflect_direction).scale(mat.Propiedades.Reflectividad));
             }
         }
 
@@ -257,7 +300,7 @@ fn cast_ray(origin: rl.Vector3, direction: rl.Vector3, objects: []const Forma, l
         }
 
         return color;
-    } else return rl.Vector3{ .x = 0.5, .y = 0.7, .z = 1.0 };
+    } else return getSkyColor(direction);
 }
 
 fn obscured(origin: rl.Vector3, light: Light, objects: []const Forma) bool {
